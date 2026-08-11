@@ -24,7 +24,7 @@ on:
 jobs:
   run-solver:
     runs-on: ubuntu-latest
-    timeout-minutes: 720
+    timeout-minutes: 360
 
     permissions:
       contents: read
@@ -55,14 +55,14 @@ jobs:
       - name: Run solver
         env:
           HOLDEM_CPU_THREADS: ${{ inputs.cpu_threads }}
-          HOLDEM_PROGRESS_SECONDS: "600"
+          HOLDEM_PROGRESS_SECONDS: "300"
         run: |
-          ./holdem5p_cpuonly \
+          timeout 355m ./holdem5p_cpuonly \
             ${{ inputs.p1 }} \
             ${{ inputs.p2 }} \
             run5p_${{ inputs.p1 }}_${{ inputs.p2 }}.chk \
             results_5p_${{ inputs.p1 }}_${{ inputs.p2 }}.csv \
-            ${{ inputs.chunk_boards }}
+            ${{ inputs.chunk_boards }} || true
 
       - name: Upload checkpoint and results
         if: always()
