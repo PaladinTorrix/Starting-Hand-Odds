@@ -1,0 +1,76 @@
+# .github/workflows/run-5p-cpu.yml
+name: Run 5-player CPU MIT solver
+
+on:
+  workflow_dispatch:
+    inputs:
+      p1:
+        description: "First hand index, 0-168"
+        required: true
+        default: "0"
+      p2:
+        description: "Last hand index, 0-168"
+        required: true
+        default: "0"
+      cpu_threads:
+        description: "CPU worker threads"
+        required: true
+        default: "4"
+      chunk_boards:
+        description: "Boards per internal chunk"
+        required: true
+        default: "16"
+
+jobs:
+  run-solver:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Download HandRanks.dat from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download Data \
+            --pattern "HandRanks.dat" \
+            --output HandRanks.dat
+
+      - name: Verify HandRanks.dat
+        run: |
+          ls -lh HandRanks.dat
+          test -s HandRanks.dat
+
+      - name: Build solver
+        run: |
+          g++ -O3 -std=c++17 -pthread \
+            holdem_5player_169hands_cpuonly_evalfix_mit_production_checkpoint.cpp \
+            -o holdem5p_cpuonly
+
+      - name: Run solver
+        env:
+          HOLDEM_CPU_THREADS: ${{ inputs.cpu_threads }}
+          HOLDEM_PROGRESS_SECONDS: "1800"
+        run: |
+          ./holdem5p_cpuonly \
+            ${{ inputs.p1 }} \
+            ${{ inputs.p2 }} \
+            run5p_${{ inputs.p1 }}_${{ inputs.p2 }}.chk \
+            results_5p_${{ inputs.p1 }}_${{ inputs.p2 }}.csv \
+            ${{ inputs.chunk_boards }}
+
+      - name: Upload checkpoint and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: holdem5p-${{ inputs.p1 }}-${{ inputs.p2 }}
+          path: |
+            results_5p_${{ inputs.p1 }}_${{ inputs.p2 }}.csv
+            run5p_${{ inputs.p1 }}_${{ inputs.p2 }}.chk
+          if-no-files-found: ignore
+          retention-days: 7
