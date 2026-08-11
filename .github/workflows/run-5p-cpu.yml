@@ -24,7 +24,7 @@ on:
 jobs:
   run-solver:
     runs-on: ubuntu-latest
-    timeout-minutes: 355
+    timeout-minutes: 720
 
     permissions:
       contents: read
@@ -55,7 +55,7 @@ jobs:
       - name: Run solver
         env:
           HOLDEM_CPU_THREADS: ${{ inputs.cpu_threads }}
-          HOLDEM_PROGRESS_SECONDS: "1800"
+          HOLDEM_PROGRESS_SECONDS: "600"
         run: |
           ./holdem5p_cpuonly \
             ${{ inputs.p1 }} \
@@ -66,7 +66,7 @@ jobs:
 
       - name: Upload checkpoint and results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: holdem5p-${{ inputs.p1 }}-${{ inputs.p2 }}
           path: |
