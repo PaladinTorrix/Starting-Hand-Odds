@@ -52,19 +52,6 @@ jobs:
             holdem_5player_169hands_cpuonly_evalfix_mit_production_checkpoint.cpp \
             -o holdem5p_cpuonly
 
-      - name: Check resume files
-        run: |
-          echo "Current directory:"
-          pwd
-
-          echo "Files in repo root:"
-          ls -lah
-
-          echo "Looking for expected resume files:"
-          ls -lah \
-            run5p_${{ inputs.p1 }}_${{ inputs.p2 }}.chk \
-            results_5p_${{ inputs.p1 }}_${{ inputs.p2 }}.csv
-            
       - name: Run solver
         env:
           HOLDEM_CPU_THREADS: ${{ inputs.cpu_threads }}
