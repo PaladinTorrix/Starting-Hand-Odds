@@ -1,0 +1,196 @@
+name: Run 20 checkpointed hands
+
+on:
+  workflow_dispatch:
+    inputs:
+      cpu_threads:
+        description: "CPU worker threads per job"
+        required: true
+        default: "4"
+      chunk_boards:
+        description: "Boards per internal chunk"
+        required: true
+        default: "16"
+      max_minutes:
+        description: "Solver runtime before saving checkpoint, less than 360"
+        required: true
+        default: "355"
+
+permissions:
+  contents: write
+
+jobs:
+  run-hand:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        offset: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+
+    concurrency:
+      group: holdem5p-hand-${{ matrix.offset }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out source branch
+        uses: actions/checkout@v6
+        with:
+          path: source
+
+      - name: Check out checkpoints branch
+        uses: actions/checkout@v6
+        with:
+          ref: checkpoints
+          path: checkpoints
+          fetch-depth: 0
+
+      - name: Set hand number
+        id: hand
+        shell: bash
+        run: |
+          HAND=${{ matrix.offset }}
+          echo "hand=$HAND" >> "$GITHUB_OUTPUT"
+
+          if [ "$HAND" -lt 0 ] || [ "$HAND" -gt 168 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Hand $HAND is outside 0-168, skipping."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Running hand $HAND"
+          fi
+
+      - name: Download HandRanks.dat from release
+        if: steps.hand.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd source
+          gh release download data-v1 \
+            --pattern "HandRanks.dat" \
+            --output HandRanks.dat
+
+          ls -lh HandRanks.dat
+          test -s HandRanks.dat
+
+      - name: Build solver
+        if: steps.hand.outputs.skip != 'true'
+        run: |
+          cd source
+          g++ -O3 -std=c++17 -pthread \
+            holdem_5player_169hands_cpuonly_evalfix_mit_production_checkpoint.cpp \
+            -o holdem5p_cpuonly
+
+      - name: Restore checkpoint and CSV from checkpoints branch
+        if: steps.hand.outputs.skip != 'true'
+        shell: bash
+        run: |
+          HAND=${{ steps.hand.outputs.hand }}
+
+          cd source
+          mkdir -p "../checkpoints/hand_${HAND}"
+
+          cp -f "../checkpoints/hand_${HAND}/run5p_${HAND}_${HAND}.chk" . 2>/dev/null || true
+          cp -f "../checkpoints/hand_${HAND}/results_5p_${HAND}_${HAND}.csv" . 2>/dev/null || true
+
+          echo "Resume files available before run:"
+          ls -lh "run5p_${HAND}_${HAND}.chk" "results_5p_${HAND}_${HAND}.csv" 2>/dev/null || true
+
+          echo
+          echo "Checkpoint contents before run:"
+          cat "run5p_${HAND}_${HAND}.chk" 2>/dev/null || true
+
+          echo
+          echo "Last CSV lines before run:"
+          tail -n 5 "results_5p_${HAND}_${HAND}.csv" 2>/dev/null || true
+
+      - name: Run solver
+        if: steps.hand.outputs.skip != 'true'
+        shell: bash
+        env:
+          HOLDEM_CPU_THREADS: ${{ inputs.cpu_threads }}
+          HOLDEM_PROGRESS_SECONDS: "300"
+        run: |
+          HAND=${{ steps.hand.outputs.hand }}
+
+          cd source
+
+          echo "Running hand ${HAND}"
+          echo "CPU threads: ${HOLDEM_CPU_THREADS}"
+          echo "Checkpoint interval: ${HOLDEM_PROGRESS_SECONDS} seconds"
+          echo "Max solver minutes: ${{ inputs.max_minutes }}"
+
+          timeout "${{ inputs.max_minutes }}m" ./holdem5p_cpuonly \
+            "${HAND}" \
+            "${HAND}" \
+            "run5p_${HAND}_${HAND}.chk" \
+            "results_5p_${HAND}_${HAND}.csv" \
+            "${{ inputs.chunk_boards }}" || true
+
+      - name: Show final state
+        if: always() && steps.hand.outputs.skip != 'true'
+        shell: bash
+        run: |
+          HAND=${{ steps.hand.outputs.hand }}
+
+          cd source
+
+          echo "Files after run:"
+          ls -lh "run5p_${HAND}_${HAND}.chk" "results_5p_${HAND}_${HAND}.csv" 2>/dev/null || true
+
+          echo
+          echo "Checkpoint after run:"
+          cat "run5p_${HAND}_${HAND}.chk" 2>/dev/null || true
+
+          echo
+          echo "Last CSV lines after run:"
+          tail -n 10 "results_5p_${HAND}_${HAND}.csv" 2>/dev/null || true
+
+      - name: Save checkpoint and CSV to checkpoints branch
+        if: always() && steps.hand.outputs.skip != 'true'
+        shell: bash
+        run: |
+          HAND=${{ steps.hand.outputs.hand }}
+
+          mkdir -p "checkpoints/hand_${HAND}"
+
+          cp -f "source/run5p_${HAND}_${HAND}.chk" "checkpoints/hand_${HAND}/" 2>/dev/null || true
+          cp -f "source/results_5p_${HAND}_${HAND}.csv" "checkpoints/hand_${HAND}/" 2>/dev/null || true
+
+          cd checkpoints
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add "hand_${HAND}/"
+
+          if git diff --cached --quiet; then
+            echo "No checkpoint/result changes to commit for hand ${HAND}."
+            exit 0
+          fi
+
+          git commit -m "Update checkpoint/results for hand ${HAND}"
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            echo "Push attempt ${attempt} for hand ${HAND}"
+
+            git pull --rebase origin checkpoints || {
+              echo "Rebase failed. Aborting rebase and retrying."
+              git rebase --abort || true
+              sleep $(( attempt * 5 ))
+              continue
+            }
+
+            if git push origin HEAD:checkpoints; then
+              echo "Checkpoint/results saved for hand ${HAND}."
+              exit 0
+            fi
+
+            echo "Push failed, probably because another matrix job pushed first. Retrying."
+            sleep $(( attempt * 5 ))
+          done
+
+          echo "Failed to push checkpoint/results for hand ${HAND} after retries."
+          exit 1
