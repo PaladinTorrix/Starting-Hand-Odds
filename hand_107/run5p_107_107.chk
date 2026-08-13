@@ -1,0 +1,94 @@
+HOLDEM5P_169HAND_CHECKPOINT_V1
+gpu_variant cpuonly_5player_169hands_evalfix_mit_production
+p1 107
+p2 107
+output_csv results_5p_107_107.csv
+all_boards 2118760
+current_hand 107
+next_board 632096
+elapsed_seconds 21020.001263047001
+total_type_count 52758717
+max_type_count_seen 136
+total_dp_states 94179143520
+cache_hits 0
+cat 0 0 0
+cat 1 0 0
+cat 2 0 0
+cat 3 0 0
+cat 4 0 0
+cat 5 0 0
+cat 6 0 0
+cat 7 0 0
+cat 8 0 0
+cat 9 0 0
+cat 10 0 0
+cat 11 0 0
+cat 12 0 0
+cat 13 0 0
+cat 14 0 0
+cat 15 54353524821781824 0
+cat 16 4377431841253152 0
+cat 17 292221191319336 0
+cat 18 5170736301888 0
+cat 19 862116973471224 0
+cat 20 272643850265733360 0
+cat 21 10368316248650160 0
+cat 22 443561438696880 0
+cat 23 4593596526576 0
+cat 24 0 0
+cat 25 0 0
+cat 26 0 0
+cat 27 0 0
+cat 28 0 0
+cat 29 0 0
+cat 30 0 0
+cat 31 0 0
+cat 32 0 0
+cat 33 0 0
+cat 34 0 0
+cat 35 0 0
+cat 36 0 0
+cat 37 0 0
+cat 38 0 0
+cat 39 0 0
+cat 40 0 0
+cat 41 0 0
+cat 42 0 0
+cat 43 0 0
+cat 44 0 0
+cat 45 0 0
+cat 46 0 0
+cat 47 0 0
+cat 48 0 0
+cat 49 0 0
+cat 50 0 0
+cat 51 0 0
+cat 52 0 0
+cat 53 0 0
+cat 54 0 0
+cat 55 0 0
+cat 56 0 0
+cat 57 0 0
+cat 58 0 0
+cat 59 0 0
+cat 60 0 0
+cat 61 0 0
+cat 62 0 0
+cat 63 0 0
+cat 64 0 0
+cat 65 0 0
+cat 66 0 0
+cat 67 0 0
+cat 68 0 0
+cat 69 0 0
+cat 70 0 0
+cat 71 0 0
+cat 72 0 0
+cat 73 0 0
+cat 74 0 0
+cat 75 0 0
+cat 76 0 0
+cat 77 0 0
+cat 78 0 0
+cat 79 0 0
+END
