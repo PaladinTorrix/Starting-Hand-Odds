@@ -68,7 +68,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd source
-          gh release download data-v1 \
+          gh release download Data \
             --pattern "HandRanks.dat" \
             --output HandRanks.dat
 
