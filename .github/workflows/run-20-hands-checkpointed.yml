@@ -1,4 +1,4 @@
-name: Run 20 checkpointed hands
+name: Run checkpointed hands
 
 on:
   workflow_dispatch:
@@ -28,7 +28,9 @@ jobs:
       fail-fast: false
       max-parallel: 20
       matrix:
-        offset: [95, 96, 97, 98, 101, 102, 103, 104, 105, 106, 107, 108, 110, 111, 112, 113, 114, 115, 116, 117]
+        # These are actual hand numbers, 0-168.
+        # Edit this list manually for the hands you want to run.
+        offset: [25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44]
 
     concurrency:
       group: holdem5p-hand-${{ matrix.offset }}
@@ -62,8 +64,49 @@ jobs:
             echo "Running hand $HAND"
           fi
 
-      - name: Download HandRanks.dat from release
+      - name: Restore checkpoint and CSV from checkpoints branch
         if: steps.hand.outputs.skip != 'true'
+        id: restore
+        shell: bash
+        run: |
+          HAND=${{ steps.hand.outputs.hand }}
+
+          cd source
+          mkdir -p "../checkpoints/hand_${HAND}"
+
+          CHK="run5p_${HAND}_${HAND}.chk"
+          CSV="results_5p_${HAND}_${HAND}.csv"
+
+          cp -f "../checkpoints/hand_${HAND}/${CHK}" . 2>/dev/null || true
+          cp -f "../checkpoints/hand_${HAND}/${CSV}" . 2>/dev/null || true
+
+          echo "Resume files available before run:"
+          ls -lh "$CHK" "$CSV" 2>/dev/null || true
+
+          echo
+          echo "Checkpoint contents before run:"
+          cat "$CHK" 2>/dev/null || true
+
+          echo
+          echo "CSV contents before run:"
+          cat "$CSV" 2>/dev/null || true
+
+          if [ -s "$CSV" ] && grep -q '[^[:space:]]' "$CSV"; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+            echo
+            echo "Hand ${HAND} already has a completed CSV result. Solver will be skipped."
+
+            # Important: remove any restored stale checkpoint locally.
+            # The save step will then remove it from the checkpoints branch too.
+            rm -f "$CHK"
+          else
+            echo "complete=false" >> "$GITHUB_OUTPUT"
+            echo
+            echo "Hand ${HAND} is not complete yet. Solver will run or resume."
+          fi
+
+      - name: Download HandRanks.dat from release
+        if: steps.hand.outputs.skip != 'true' && steps.restore.outputs.complete != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -76,38 +119,15 @@ jobs:
           test -s HandRanks.dat
 
       - name: Build solver
-        if: steps.hand.outputs.skip != 'true'
+        if: steps.hand.outputs.skip != 'true' && steps.restore.outputs.complete != 'true'
         run: |
           cd source
           g++ -O3 -std=c++17 -pthread \
             holdem_5player_169hands_cpuonly_evalfix_mit_production_checkpoint.cpp \
             -o holdem5p_cpuonly
 
-      - name: Restore checkpoint and CSV from checkpoints branch
-        if: steps.hand.outputs.skip != 'true'
-        shell: bash
-        run: |
-          HAND=${{ steps.hand.outputs.hand }}
-
-          cd source
-          mkdir -p "../checkpoints/hand_${HAND}"
-
-          cp -f "../checkpoints/hand_${HAND}/run5p_${HAND}_${HAND}.chk" . 2>/dev/null || true
-          cp -f "../checkpoints/hand_${HAND}/results_5p_${HAND}_${HAND}.csv" . 2>/dev/null || true
-
-          echo "Resume files available before run:"
-          ls -lh "run5p_${HAND}_${HAND}.chk" "results_5p_${HAND}_${HAND}.csv" 2>/dev/null || true
-
-          echo
-          echo "Checkpoint contents before run:"
-          cat "run5p_${HAND}_${HAND}.chk" 2>/dev/null || true
-
-          echo
-          echo "Last CSV lines before run:"
-          tail -n 5 "results_5p_${HAND}_${HAND}.csv" 2>/dev/null || true
-
       - name: Run solver
-        if: steps.hand.outputs.skip != 'true'
+        if: steps.hand.outputs.skip != 'true' && steps.restore.outputs.complete != 'true'
         shell: bash
         env:
           HOLDEM_CPU_THREADS: ${{ inputs.cpu_threads }}
@@ -137,16 +157,19 @@ jobs:
 
           cd source
 
+          CHK="run5p_${HAND}_${HAND}.chk"
+          CSV="results_5p_${HAND}_${HAND}.csv"
+
           echo "Files after run:"
-          ls -lh "run5p_${HAND}_${HAND}.chk" "results_5p_${HAND}_${HAND}.csv" 2>/dev/null || true
+          ls -lh "$CHK" "$CSV" 2>/dev/null || true
 
           echo
           echo "Checkpoint after run:"
-          cat "run5p_${HAND}_${HAND}.chk" 2>/dev/null || true
+          cat "$CHK" 2>/dev/null || true
 
           echo
-          echo "Last CSV lines after run:"
-          tail -n 10 "results_5p_${HAND}_${HAND}.csv" 2>/dev/null || true
+          echo "CSV after run:"
+          cat "$CSV" 2>/dev/null || true
 
       - name: Save checkpoint and CSV to checkpoints branch
         if: always() && steps.hand.outputs.skip != 'true'
@@ -156,15 +179,27 @@ jobs:
 
           mkdir -p "checkpoints/hand_${HAND}"
 
-          cp -f "source/run5p_${HAND}_${HAND}.chk" "checkpoints/hand_${HAND}/" 2>/dev/null || true
-          cp -f "source/results_5p_${HAND}_${HAND}.csv" "checkpoints/hand_${HAND}/" 2>/dev/null || true
+          CHK="run5p_${HAND}_${HAND}.chk"
+          CSV="results_5p_${HAND}_${HAND}.csv"
+
+          if [ -f "source/${CSV}" ]; then
+            cp -f "source/${CSV}" "checkpoints/hand_${HAND}/${CSV}"
+          fi
+
+          if [ -f "source/${CHK}" ]; then
+            cp -f "source/${CHK}" "checkpoints/hand_${HAND}/${CHK}"
+          else
+            echo "No local checkpoint remains for hand ${HAND}; removing stale checkpoint from checkpoints branch."
+            rm -f "checkpoints/hand_${HAND}/${CHK}"
+          fi
 
           cd checkpoints
 
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          git add "hand_${HAND}/"
+          # -A is important because it stages deletions too.
+          git add -A "hand_${HAND}/"
 
           if git diff --cached --quiet; then
             echo "No checkpoint/result changes to commit for hand ${HAND}."
